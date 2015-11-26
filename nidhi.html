@@ -1,0 +1,326 @@
+<!DOCTYPE HTML>
+<html manifest="nidhi.appcache">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="icon" type="image/png" href="128.png">
+	<title>Nidhi App</title>
+    <script type="text/javascript">
+        if (document.getElementById && document.createElement) {
+            document.write("<style>html {display: none;}</style><script>if( self == top ){document.documentElement.style.display = 'block';} else {top.location = self.location;}</sc" + "ript>");
+        } else {
+            if (top != self) {
+                top.location = self.location;
+            }
+        }
+    </script>
+
+    <!--   <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/pbkdf2.js"></script> -->
+    <script src="tripledes.js"></script>
+    <script src="FileSaver.min.js"></script>
+
+
+    <script>
+        function encryptContent(message, passphrase) {
+            // var generatedkey = generateKey(passphrase);
+            var mode = CryptoJS.mode.CBC;
+            var padding = CryptoJS.pad.Pkcs7;
+            var encryptedObj = CryptoJS.TripleDES.encrypt(message, passphrase, {
+                mode: mode,
+                padding: padding,
+                format: JsonFormatter
+            });
+            message = JsonFormatter.stringify(encryptedObj);
+            console.log(message);
+            return message;
+        }
+
+        function decryptContent(message, passphrase) {
+            //var generatedkey = generateKey(passphrase);
+            var mode = CryptoJS.mode.CBC;
+            var padding = CryptoJS.pad.Pkcs7;
+            var message = CryptoJS.TripleDES.decrypt(message, passphrase, {
+                mode: mode,
+                padding: padding,
+                format: JsonFormatter
+            });
+            message = message.toString(CryptoJS.enc.Utf8)
+
+            return message;
+        }
+
+        /*
+        function generateKey(passphrase) {
+            var salt = CryptoJS.lib.WordArray.random(128 / 8);
+            return CryptoJS.PBKDF2(passphrase, salt, {
+                keySize: 512 / 32,
+                iterations: 10
+            });
+        }*/
+
+        var JsonFormatter = {
+            stringify: function (cipherParams) {
+                // create json object with ciphertext
+                var jsonObj = {
+                    ct: cipherParams.ciphertext.toString(CryptoJS.enc.Base64)
+                };
+
+                // optionally add iv and salt
+                if (cipherParams.iv) {
+                    jsonObj.iv = cipherParams.iv.toString();
+                }
+                if (cipherParams.salt) {
+                    jsonObj.s = cipherParams.salt.toString();
+                }
+
+                // stringify json object
+                return JSON.stringify(jsonObj);
+            },
+
+            parse: function (jsonStr) {
+                // parse json string
+                var jsonObj = JSON.parse(jsonStr);
+
+                // extract ciphertext from json object, and create cipher params object
+                var cipherParams = CryptoJS.lib.CipherParams.create({
+                    ciphertext: CryptoJS.enc.Base64.parse(jsonObj.ct)
+                });
+
+                // optionally extract iv and salt
+                if (jsonObj.iv) {
+                    cipherParams.iv = CryptoJS.enc.Hex.parse(jsonObj.iv)
+                }
+                if (jsonObj.s) {
+                    cipherParams.salt = CryptoJS.enc.Hex.parse(jsonObj.s)
+                }
+
+                return cipherParams;
+            }
+        };
+
+        function saveCurrentDataFile() {
+            var content = getDataFromView();
+            console.log(content);
+            content = encryptContent(content, getPassphrase());
+
+            nidhi.file.saveFile(content)
+
+        }
+
+        function saveCurrentData() {
+            var content = getDataFromView();
+            console.log(content);
+            content = encryptContent(content, getPassphrase());
+            saveDataToStorage(content);
+
+        }
+
+        function openCurrentDataFile(content) {
+            console.log('Open content' + content);
+            if (content != null) {
+                content = decryptContent(content, getPassphrase());
+            }
+            saveDataToView(content);
+        }
+
+        function openCurrentData() {
+            var content = getDataFromStorage();
+            if (!content || content.trim() === '') {
+                content = getDataFromView();
+            }
+            if (content != null) {
+                content = decryptContent(content, getPassphrase());
+            }
+            saveDataToView(content)
+        }
+
+        function getDataFromStorage() {
+            var message = localStorage.getItem('enmessage');
+            return message;
+        }
+
+        function saveDataToStorage(message) {
+            localStorage.setItem('enmessage', message);
+        }
+
+        function getDataFromView() {
+            var ele = document.getElementById("contentdiv");
+            var content = ele.innerHTML;
+            return content;
+        }
+
+
+        function saveDataToView(content) {
+            var ele = document.getElementById("contentdiv");
+            ele.innerHTML = content;
+        }
+
+        function getPassphrase() {
+            var passphraseEle = document.getElementById("passphrase");
+            var passphrase = passphraseEle.value;
+            return passphrase;
+        }
+
+        function capturePassphrase() {
+            var passphraseDiv = document.getElementById("passphraseDiv");
+            passphraseDiv.style.display = 'none';
+        }
+
+
+        document.onkeydown = overrideKeyboardEvent;
+        document.onkeyup = overrideKeyboardEvent;
+        var keyIsDown = {};
+
+        function overrideKeyboardEvent(e) {
+            switch (e.type) {
+            case "keydown":
+                if (!keyIsDown[e.keyCode]) {
+                    try {
+                        keyIsDown[e.keyCode] = true;
+                        if (e.ctrlKey && e.shiftKey && e.keyCode == 'S'.charCodeAt(0)) {
+                            console.log('Save data');
+                            saveCurrentDataFile();
+                            disabledEventPropagation(e);
+                            keyIsDown[e.keyCode] = false;
+                            return false;
+                        }
+                        if (e.ctrlKey && e.keyCode == 'S'.charCodeAt(0)) {
+                            console.log('Save data');
+                            saveCurrentData();
+                            disabledEventPropagation(e);
+                            keyIsDown[e.keyCode] = false;
+                            return false;
+                        }
+
+
+                        if (e.ctrlKey && e.shiftKey && e.keyCode == 'O'.charCodeAt(0)) {
+                            console.log('Open data');
+                            loadFromFile();
+                            disabledEventPropagation(e);
+                            keyIsDown[e.keyCode] = false;
+                            return false;
+                        }
+                        if (e.ctrlKey && e.keyCode == 'O'.charCodeAt(0)) {
+                            console.log('Open data');
+                            openCurrentData();
+                            disabledEventPropagation(e);
+                            keyIsDown[e.keyCode] = false;
+                            return false;
+                        }
+
+                    } catch (e) {
+                        console.log("invalid input.")
+                        return false;
+                    }
+
+                    // do key down stuff here
+                }
+                break;
+            case "keyup":
+                delete(keyIsDown[e.keyCode]);
+                // do key up stuff here
+                break;
+            }
+
+
+            return true;
+        }
+
+        function disabledEventPropagation(e) {
+            if (e) {
+                e.preventDefault();
+                if (e.stopPropagation) {
+                    e.stopPropagation();
+                } else if (window.event) {
+                    window.event.cancelBubble = true;
+                }
+            }
+        }
+
+        function fileLoadHandler(event) {
+            nidhi.file.loadFile(event, openCurrentDataFile);
+
+        }
+
+        function loadFromFile() {
+            var ele = document.getElementById("fileUploader");
+            if (!ele) {
+                ele = document.createElement('input');
+                ele.setAttribute("type", "file");
+                document.body.appendChild(ele);
+                ele.addEventListener('change', fileLoadHandler, false);
+                ele.click();
+            }
+
+        }
+
+        var nidhi = {
+            file: {
+                get_blob_builder: function () {
+                    return window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder;
+                },
+
+                saveFile: function (fileContent, fileType) {
+                    try {
+
+                        var blob = new Blob([fileContent]);
+
+                        if (!fileType)
+                            fileType = "text/plain;charset=utf-8";
+                        if (saveAs)
+                            saveAs(blob, 'sumanth.ni');
+                    } catch (e) {
+                        console.log(e.stack);
+                        return true;
+                    }
+                    return true;
+                },
+
+                loadFile: function (event, callback) {
+
+                    var files = event.target.files;
+                    for (var i = 0, f; f = files[i]; i++) {
+
+                        var reader = new FileReader();
+                        reader.onload = (function (theFile) {
+                            return function (e) {
+                                callback(e.target.result)
+                            };
+                        })(f);
+
+                        reader.readAsText(f);
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        #contentdiv {
+            height: 101%;
+            position: absolute;
+            width: 98%;
+            background-color: #FFFFCC;
+            overflow-y: scroll;
+        }
+        
+        #passphraseDiv {
+            height: 101%;
+            position: absolute;
+            width: 100%;
+            background-color: transparent;
+            z-index: 100;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="contentdiv" contenteditable="true" style=''></div>
+    <!-- <button value="" id="encryptContent" onclick='encryptContent(event);' style='height:40px;width:100px;'>encrypt</button>
+    <button value="" id="decryptContent" onclick='decryptContent(event);' style='height:40px;width:100px;'>decrypt</button> -->
+    <div id="passphraseDiv" style="display:block;">
+        <input type="password" id='passphrase' style="position:fixed;top:50px;left:100px;width:200px;height:40px;margin-left:20px;" onblur="capturePassphrase()" />
+    </div>
+</body>
+
+</html>
